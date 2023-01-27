@@ -10,6 +10,8 @@ RUN apk add --no-cache \
         shadow \
         tinyproxy
 
+RUN modprobe ip6table_filter
+
 COPY data/ /data/
 
 ENV KILL_SWITCH=iptables
