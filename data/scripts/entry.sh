@@ -33,6 +33,7 @@ fi
 echo "Use default resolv.conf: ${USE_VPN_DNS:-off}
 Allowing subnets: ${SUBNETS:-none}
 Kill switch: $KILL_SWITCH
+Interface: $INTERFACE
 Using OpenVPN log level: $VPN_LOG_LEVEL"
 
 if is_enabled "$HTTP_PROXY"; then
@@ -100,7 +101,7 @@ case "$KILL_SWITCH" in
 
         if [[ $SUBNETS ]]; then
             for subnet in ${SUBNETS//,/ }; do
-                ip route add "$subnet" via "$default_gateway" dev eth0
+                ip route add "$subnet" via "$default_gateway" dev "$INTERFACE"
                 iptables -A INPUT -s "$subnet" -j ACCEPT
                 iptables -A OUTPUT -d "$subnet" -j ACCEPT
             done
@@ -117,10 +118,10 @@ case "$KILL_SWITCH" in
             protocol=${remote[2]:-${global_protocol:-udp}}
 
             if [[ $address =~ $ip_regex ]]; then
-                iptables -A OUTPUT -o eth0 -d "$address" -p "$protocol" --dport "$port" -j ACCEPT
+                iptables -A OUTPUT -o "$INTERFACE" -d "$address" -p "$protocol" --dport "$port" -j ACCEPT
             else
                 for ip in $(dig -4 +short "$address"); do
-                    iptables -A OUTPUT -o eth0 -d "$ip" -p "$protocol" --dport "$port" -j ACCEPT
+                    iptables -A OUTPUT -o "$INTERFACE" -d "$ip" -p "$protocol" --dport "$port" -j ACCEPT
                     printf "%s %s\n" "$ip" "$address" >> /etc/hosts
                 done
             fi
@@ -158,7 +159,7 @@ case "$KILL_SWITCH" in
         if [[ $SUBNETS ]]; then
             printf '# allow traffic to/from the specified subnets\n' >> $nftables_config_file
             for subnet in ${SUBNETS//,/ }; do
-                ip route add "$subnet" via "$default_gateway" dev eth0
+                ip route add "$subnet" via "$default_gateway" dev "$INTERFACE"
                 printf '%s\n' \
                     "add rule inet killswitch incoming ip saddr $subnet accept" \
                     "add rule inet killswitch outgoing ip daddr $subnet accept" '' >> $nftables_config_file
@@ -179,11 +180,11 @@ case "$KILL_SWITCH" in
 
             if [[ $address =~ $ip_regex ]]; then
                 printf '%s\n' \
-                    "add rule inet killswitch outgoing oifname eth0 ip daddr $address $protocol dport $port accept" >> $nftables_config_file
+                    "add rule inet killswitch outgoing oifname "$INTERFACE" ip daddr $address $protocol dport $port accept" >> $nftables_config_file
             else
                 for ip in $(dig -4 +short "$address"); do
                     printf '%s\n' \
-                        "add rule inet killswitch outgoing oifname eth0 ip daddr $ip $protocol dport $port accept" >> $nftables_config_file
+                        "add rule inet killswitch outgoing oifname "$INTERFACE" ip daddr $ip $protocol dport $port accept" >> $nftables_config_file
                     printf "%s %s\n" "$ip" "$address" >> /etc/hosts
                 done
             fi
@@ -200,7 +201,7 @@ case "$KILL_SWITCH" in
     *)
         echo "info: kill switch is off"
         for subnet in ${SUBNETS//,/ }; do
-            ip route add "$subnet" via "$default_gateway" dev eth0
+            ip route add "$subnet" via "$default_gateway" dev "$INTERFACE"
         done
         ;;
 
